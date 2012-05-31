@@ -1,0 +1,18 @@
+# Default values
+#
+#USER="srs-milt"
+#SOCKET="inet:10040@localhost"
+#FORWARD=
+#REVERSE=
+#LOCAL_DOMAINS="example.com .allsubdomains.example.com"
+#SRS_DOMAIN="srs.example.com"
+#SRS_SECRETS="secret"
+#EXTRA_ARGS="--spf-check"
+#
+# User configuration
+#
+#SOCKET0="inet:10043@localhost"
+#FORWARD0=1
+#SOCKET1="inet:10044@localhost"
+#REVERSE1=1
+#...

@@ -1,0 +1,24 @@
+--- milter-simple-srs-0.0.1/srs-milter.init.orig	2011-09-02 22:53:39.000000000 -0500
++++ milter-simple-srs-0.0.1/srs-milter.init	2011-09-02 22:55:09.000000000 -0500
+@@ -76,7 +76,7 @@
+ 		echo -n $"Starting $desc ($prog #$i): "
+ 		touch $pidfile
+ 		chown $USER $pidfile
+-		daemon --user=${USER} /usr/sbin/${prog} ${CMD_ARGS[$i]} -P $pidfile
++		daemon --user=${USER} LD_LIBRARY_PATH=/opt/sendmail-8.14.4/lib /usr/sbin/${prog} ${CMD_ARGS[$i]} -P $pidfile
+ 		RETVAL=$?
+ 		echo
+ 		[ $RETVAL -eq 0 ] && touch /var/lock/subsys/${prog}${i}
+--- milter-simple-srs-0.0.1/src/Makefile.orig	2011-07-04 12:47:55.000000000 -0500
++++ milter-simple-srs-0.0.1/src/Makefile	2011-07-04 15:50:00.000000000 -0500
+@@ -2,8 +2,8 @@
+ MANDIR =	/usr/man/man8
+ #CC =		gcc
+ DEFINES =	
+-INCDIRS =	
+-LIBDIRS =	
++INCDIRS =	-I/opt/sendmail-8.14.4/include
++LIBDIRS =	-L/opt/sendmail-8.14.4/lib
+ CFLAGS =	-Wall $(DEFINES) $(INCDIRS)
+ LDFLAGS =	-g3 $(LIBDIRS)
+ INSTALL =	/usr/bin/install

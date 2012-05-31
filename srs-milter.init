@@ -1,0 +1,136 @@
+#!/bin/bash
+#
+# Init file for SRS sendmail milter.
+#
+# chkconfig: - 79 21
+# description: srs-milter is a daemon that hooks into sendmail and \
+#              rewrite mail envelope addresses according SRS standard
+#
+# processname: srs-milter
+# config: /etc/sysconfig/srs-milter
+# pidfile: /var/run/srs-milter.pid
+
+source /etc/rc.d/init.d/functions
+source /etc/sysconfig/network
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+[ -x /usr/sbin/srs-filter ] || exit 1
+
+### Default variables
+USER="srs-milt"
+SOCKET="inet:10040@localhost"
+FORWARD=
+REVERSE=
+LOCAL_DOMAINS="example.com .allsubdomains.example.com"
+SRS_DOMAIN="srs.example.com"
+SRS_SECRETS="secret"
+EXTRA_ARGS="--spf-check"
+
+SYSCONFIG="/etc/sysconfig/srs-milter"
+
+### Read configuration
+[ -r "$SYSCONFIG" ] && source "$SYSCONFIG"
+NUM=0
+CMD_ARGS=()
+while [ ! -z $(eval "echo \$SOCKET${NUM}") ]; do
+  LSOCKET=${SOCKET}
+  LFORWARD=${FORWARD}
+  LREVERSE=${REVERSE}
+  LLOCAL_DOMAINS=${LOCAL_DOMAINS}
+  LSRS_DOMAIN=${SRS_DOMAIN}
+  LSRS_SECRETS=${SRS_SECRETS}
+  LEXTRA_ARGS=${EXTRA_ARGS}
+  [ ! -z $(eval "echo \$SOCKET${NUM}") ] && LSOCKET=$(eval "echo \$SOCKET${NUM}")
+  [ ! -z $(eval "echo \$FORWARD${NUM}") ] && LFORWARD=$(eval "echo \$FORWARD${NUM}")
+  [ ! -z $(eval "echo \$REVERSE${NUM}") ] && LREVERSE=$(eval "echo \$REVERSE${NUM}")
+  [ ! -z $(eval "echo \$LOCAL_DOMAINS${NUM}") ] && LLOCAL_DOMAINS=$(eval "echo \$LOCAL_DOMAINS${NUM}")
+  [ ! -z $(eval "echo \$SRS_DOMAIN${NUM}") ] && LSRS_DOMAIN=$(eval "echo \$SRS_DOMAIN${NUM}")
+  [ ! -z $(eval "echo \$SRS_SECRETS${NUM}") ] && LSRS_SECRETS=$(eval "echo \$SRS_SECRETS${NUM}")
+  [ ! -z $(eval "echo \$EXTRA_ARGS${NUM}") ] && LEXTRA_ARGS=$(eval "echo \$EXTRA_ARGS${NUM}")
+  CMD_ARGS[${NUM}]=""
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} --socket=$LSOCKET"
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z ${LFORWARD} ] && echo "--forward")
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z ${LREVERSE} ] && echo "--reverse")
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LLOCAL_DOMAINS}" ] && echo $(for i in ${LLOCAL_DOMAINS}; do echo "--local-domain=${i}"; done))
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LSRS_DOMAIN}" ] && echo $(for i in ${LSRS_DOMAIN}; do echo "--srs-domain=${i}"; done))
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LSRS_SECRETS}" ] && echo $(for i in ${LSRS_SECRETS}; do echo "--srs-secret=${i}"; done))
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} $LEXTRA_ARGS"
+  NUM=$((${NUM}+1))
+done
+if [ ${#CMD_ARGS[*]} -eq 0 ]; then
+  CMD_ARGS[0]=""
+  CMD_ARGS[0]="${CMD_ARGS[0]} --socket=$SOCKET"
+  CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z ${FORWARD} ] && echo "--forward")
+  CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z ${REVERSE} ] && echo "--reverse")
+  CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_DOMAIN}" ] && echo $(for i in ${SRS_DOMAIN}; do echo "--srs-domain=${i}"; done))
+  CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_SECRETS}" ] && echo $(for i in ${SRS_SECRETS}; do echo "--srs-secret=${i}"; done))
+  CMD_ARGS[0]="${CMD_ARGS[0]} $EXTRA_ARGS"
+fi
+
+RETVAL=0
+prog="srs-filter"
+desc="SRS milter"
+#pidfile=/var/run/dk-milter.pid
+
+start() {
+        for ((i=0; $i<${#CMD_ARGS[*]}; i=$(($i+1)) )); do
+		pidfile=/var/run/${prog}${i}.pid
+		echo -n $"Starting $desc ($prog #$i): "
+		touch $pidfile
+		chown $USER $pidfile
+		daemon --user=${USER} /usr/sbin/${prog} ${CMD_ARGS[$i]} -P $pidfile
+		RETVAL=$?
+		echo
+		[ $RETVAL -eq 0 ] && touch /var/lock/subsys/${prog}${i}
+        done
+	return $RETVAL
+}
+
+stop() {
+	echo -n $"Shutting down all $desc ($prog): "
+	killproc $prog
+	RETVAL=$?
+	echo
+	if [ $RETVAL -eq 0 ]; then
+		for ((i=0; $i<${#CMD_ARGS[*]}; i=$(($i+1)) )); do
+			pidfile=/var/run/${prog}${i}.pid
+			echo -n $"Cleanup for $desc ($prog #$i): "
+			rm -f /var/lock/subsys/${prog}${i}
+			echo
+		done
+        fi
+	return $RETVAL
+}
+
+restart() {
+	stop
+	sleep 2
+	start
+}
+
+case "$1" in
+  start)
+	start
+	;;
+  stop)
+	stop
+	;;
+  restart|reload)
+	restart
+	;;
+  condrestart)
+	[ -e /var/lock/subsys/${prog} ] && restart
+	RETVAL=$?
+	;;
+  status)
+	status $prog
+	RETVAL=$?
+	;;
+  *)
+	echo $"Usage: $0 {start|stop|restart|condrestart|status}"
+	RETVAL=1
+esac
+
+exit $RETVAL
