@@ -74,7 +74,7 @@ struct srs_milter_thread_data {
 
 
 int is_local_addr(const char *addr) {
-  int i;
+  int i, r;
   const char *dom;
 
   if (!addr)
@@ -93,12 +93,11 @@ int is_local_addr(const char *addr) {
     if (strcasecmp(dom, CONFIG_domains[i]) == 0)
       return 1;
 
-    if (strlen(dom) <= strlen(CONFIG_domains[i]))
-      continue;
-
     // match subdomain
-    if (strcasecmp(dom+strlen(dom)-strlen(CONFIG_domains[i]), CONFIG_domains[i]) == 0)
+    r = strlen(dom) - strlen(CONFIG_domains[i]);
+    if (r > 0 && CONFIG_domains[i][0] == '.' && strcasecmp(dom + r, CONFIG_domains[i]) == 0)
       return 1;
+
   }
 
   return 0;
