@@ -598,19 +598,19 @@ xxfi_srs_milter_close(SMFICTX* ctx) {
 
 
 static struct smfiDesc smfilter = {
-  SRS_MILTER_NAME,		/* filter name */
-  SMFI_VERSION,			/* version code -- do not change */
-  SMFIF_CHGFROM | SMFIF_ADDRCPT | SMFIF_DELRCPT ,	/* flags */
-  xxfi_srs_milter_connect,	/* connection info filter */
-  NULL,				/* SMTP HELO command filter */
-  xxfi_srs_milter_envfrom,	/* envelope sender filter */
-  xxfi_srs_milter_envrcpt,	/* envelope recipient filter */
-  NULL,				/* header filter */
-  NULL,				/* end of header */
-  NULL,				/* body block filter */
-  xxfi_srs_milter_eom,		/* end of message */
-  NULL,				/* message aborted */
-  xxfi_srs_milter_close		/* connection cleanup */
+  SRS_MILTER_NAME,              /* filter name */
+  SMFI_VERSION,                 /* version code -- do not change */
+  SMFIF_CHGFROM | SMFIF_ADDRCPT | SMFIF_DELRCPT, /* flags */
+  xxfi_srs_milter_connect,      /* connection info filter */
+  NULL,                         /* SMTP HELO command filter */
+  xxfi_srs_milter_envfrom,      /* envelope sender filter */
+  xxfi_srs_milter_envrcpt,      /* envelope recipient filter */
+  NULL,                         /* header filter */
+  NULL,                         /* end of header */
+  NULL,                         /* body block filter */
+  xxfi_srs_milter_eom,          /* end of message */
+  NULL,                         /* message aborted */
+  xxfi_srs_milter_close         /* connection cleanup */
 };
 
 
