@@ -884,7 +884,6 @@ int main(int argc, char* argv[]) {
 
       case 'C':
         {
-          i = 0;
           char *err = srs_milter_load_file_secrets(&CONFIG_srs_secrets, optarg);
           if (err) {
             usage(argv[0]);
