@@ -3,8 +3,8 @@ SRS milter plugin for postfix
 
 This milter implemets SRS (Sender Rewriting Scheme) that can be used to fix envelope MAIL FROM for forwarded mails protected by SPF. It can be configured in two modes for:
 
-* incoming mail -- rewrite RCPT TO addresses in SRS format back
-* outgoing mail -- rewrite MAIL FROM address to SRS format
+* Incoming mail -- rewrite RCPT TO addresses in SRS format back
+* Outgoing mail -- rewrite MAIL FROM address to SRS format
 
 
 Download
