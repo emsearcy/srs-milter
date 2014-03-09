@@ -68,6 +68,7 @@ if [ ${#CMD_ARGS[*]} -eq 0 ]; then
   CMD_ARGS[0]="${CMD_ARGS[0]} --socket=$SOCKET"
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z ${FORWARD} ] && echo "--forward")
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z ${REVERSE} ] && echo "--reverse")
+  CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${LOCAL_DOMAINS}" ] && echo $(for i in ${LOCAL_DOMAINS}; do echo "--local-domain=${i}"; done))
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_DOMAIN}" ] && echo $(for i in ${SRS_DOMAIN}; do echo "--srs-domain=${i}"; done))
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_SECRETS}" ] && echo $(for i in ${SRS_SECRETS}; do echo "--srs-secret=${i}"; done))
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_SECRETS_FILE}" ] && echo $(for i in ${SRS_SECRETS_FILE}; do echo "--srs-secret-file=${i}"; done))
