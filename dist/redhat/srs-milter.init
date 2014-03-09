@@ -16,7 +16,7 @@ source /etc/sysconfig/network
 # Check that networking is up.
 [ ${NETWORKING} = "no" ] && exit 0
 
-[ -x /usr/sbin/srs-filter ] || exit 1
+[ -x /usr/sbin/srs-milter ] || exit 1
 
 ### Default variables
 USER="srs-milt"
@@ -75,7 +75,7 @@ if [ ${#CMD_ARGS[*]} -eq 0 ]; then
 fi
 
 RETVAL=0
-prog="srs-filter"
+prog="srs-milter"
 desc="SRS milter"
 #pidfile=/var/run/dk-milter.pid
 
