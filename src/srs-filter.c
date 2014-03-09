@@ -102,7 +102,7 @@ char *srs_milter_load_file_secrets(char ***CONFIG_srs_secrets, char *secrets_fil
       while (CONFIG_srs_secrets[i]) i++;
       *CONFIG_srs_secrets = (char **) realloc(*CONFIG_srs_secrets, (i+2)*sizeof(char *));
     }
-    (*CONFIG_srs_secrets)[i] = buffer;
+    (*CONFIG_srs_secrets)[i] = strdup(buffer);
     (*CONFIG_srs_secrets)[i+1] = NULL;
   }
 
@@ -110,8 +110,6 @@ char *srs_milter_load_file_secrets(char ***CONFIG_srs_secrets, char *secrets_fil
 
   return NULL;
 }
-
-
 
 int is_local_addr(const char *addr) {
   int i, r;
@@ -878,7 +876,7 @@ int main(int argc, char* argv[]) {
           while (CONFIG_srs_secrets[i]) i++;
           CONFIG_srs_secrets = (char **) realloc(CONFIG_srs_secrets, (i+2)*sizeof(char *));
         }
-        CONFIG_srs_secrets[i] = optarg;
+        CONFIG_srs_secrets[i] = strdup(optarg); // We free secrets on exit because some may be allocated from a file
         CONFIG_srs_secrets[i+1] = NULL;
         break;
 
@@ -1136,6 +1134,14 @@ int main(int argc, char* argv[]) {
   if (smfi_main() == MI_FAILURE) {
     fprintf(stderr, "%s: milter failed\n", SRS_MILTER_NAME);
     exit(EXIT_FAILURE);
+  }
+
+  // Free the secrets
+  {
+    char **s = CONFIG_srs_secrets;
+    do {
+      free(*s);
+    } while (*++s != NULL);
   }
 
   syslog(LOG_INFO, "exitting");
