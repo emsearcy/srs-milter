@@ -700,11 +700,11 @@ void daemonize() {
 
 
 void usage(char *argv0) {
-  printf("SRS milter (version %s)", SRS_MILTER_VERSION);
+  printf("SRS milter (version %s)\n", SRS_MILTER_VERSION);
   printf("usage:\n");
   printf("  %s [--forward] [--reverse] \\\n", argv0);
   printf("    --socket unix:/var/run/srs-milter.sock \\\n");
-  printf("    --srs-domain=example.com --srs-secret=secret1 [--srs-secret=secret2 ...] \\\n");
+  printf("    --srs-domain=example.com --srs-secret-file=secret-file \\\n");
   printf("    [--domain=example.com] [--domain=.example.com ...]\n");
   printf("\n");
   printf("options:\n");
@@ -733,6 +733,8 @@ void usage(char *argv0) {
   printf("      our SRS domain name\n");
   printf("  -c, --srs-secret\n");
   printf("      secret string for SRS hashing algorithm\n");
+  printf("      WARNING: this is NOT secure, it is recommended to use --srs-secret-file\n");
+  printf("               instead to ensure secrets are not visible in process listings\n");
   printf("  -C, --srs-secret-file\n");
   printf("      file containing secrets for SRS hashing algorithm\n");
   printf("  -w, --srs-alwaysrewrite\n");
