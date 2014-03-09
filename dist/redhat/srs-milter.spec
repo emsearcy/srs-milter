@@ -1,7 +1,7 @@
 Summary:        Milter (mail filter) for SRS
 Name:           srs-milter
-Version:        0.0.1
-Release:        3
+Version:        0.0.2
+Release:        1
 License:        GPL
 Group:          System Environment/Daemons
 URL:            http://kmlinux.fjfi.cvut.cz/~vokacpet/activities/srs-milter

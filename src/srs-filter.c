@@ -24,7 +24,7 @@
 
 
 #define SRS_MILTER_NAME "srs-milter"
-#define SRS_MILTER_VERSION "0.0.1"
+#define SRS_MILTER_VERSION "0.0.2"
 
 #define SS_STATE_NULL             0x00
 #define SS_STATE_INVALID_CONN     0x01
