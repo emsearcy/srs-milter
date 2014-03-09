@@ -25,7 +25,8 @@ FORWARD=
 REVERSE=
 LOCAL_DOMAINS="example.com .allsubdomains.example.com"
 SRS_DOMAIN="srs.example.com"
-SRS_SECRETS="secret"
+SRS_SECRETS=
+SRS_SECRETS_FILE=
 EXTRA_ARGS="--spf-check"
 
 SYSCONFIG="/etc/sysconfig/srs-milter"
@@ -41,6 +42,7 @@ while [ ! -z $(eval "echo \$SOCKET${NUM}") ]; do
   LLOCAL_DOMAINS=${LOCAL_DOMAINS}
   LSRS_DOMAIN=${SRS_DOMAIN}
   LSRS_SECRETS=${SRS_SECRETS}
+  LSRS_SECRETS_FILE=${SRS_SECRETS_FILE}
   LEXTRA_ARGS=${EXTRA_ARGS}
   [ ! -z $(eval "echo \$SOCKET${NUM}") ] && LSOCKET=$(eval "echo \$SOCKET${NUM}")
   [ ! -z $(eval "echo \$FORWARD${NUM}") ] && LFORWARD=$(eval "echo \$FORWARD${NUM}")
@@ -48,6 +50,7 @@ while [ ! -z $(eval "echo \$SOCKET${NUM}") ]; do
   [ ! -z $(eval "echo \$LOCAL_DOMAINS${NUM}") ] && LLOCAL_DOMAINS=$(eval "echo \$LOCAL_DOMAINS${NUM}")
   [ ! -z $(eval "echo \$SRS_DOMAIN${NUM}") ] && LSRS_DOMAIN=$(eval "echo \$SRS_DOMAIN${NUM}")
   [ ! -z $(eval "echo \$SRS_SECRETS${NUM}") ] && LSRS_SECRETS=$(eval "echo \$SRS_SECRETS${NUM}")
+  [ ! -z $(eval "echo \$SRS_SECRETS_FILE${NUM}") ] && LSRS_SECRETS_FILE=$(eval "echo \$SRS_SECRETS_FILE${NUM}")
   [ ! -z $(eval "echo \$EXTRA_ARGS${NUM}") ] && LEXTRA_ARGS=$(eval "echo \$EXTRA_ARGS${NUM}")
   CMD_ARGS[${NUM}]=""
   CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} --socket=$LSOCKET"
@@ -56,6 +59,7 @@ while [ ! -z $(eval "echo \$SOCKET${NUM}") ]; do
   CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LLOCAL_DOMAINS}" ] && echo $(for i in ${LLOCAL_DOMAINS}; do echo "--local-domain=${i}"; done))
   CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LSRS_DOMAIN}" ] && echo $(for i in ${LSRS_DOMAIN}; do echo "--srs-domain=${i}"; done))
   CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LSRS_SECRETS}" ] && echo $(for i in ${LSRS_SECRETS}; do echo "--srs-secret=${i}"; done))
+  CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} "$([ ! -z "${LSRS_SECRETS_FILE}" ] && echo $(for i in ${LSRS_SECRETS_FILE}; do echo "--srs-secret-file=${i}"; done))
   CMD_ARGS[${NUM}]="${CMD_ARGS[${NUM}]} $LEXTRA_ARGS"
   NUM=$((${NUM}+1))
 done
@@ -66,6 +70,7 @@ if [ ${#CMD_ARGS[*]} -eq 0 ]; then
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z ${REVERSE} ] && echo "--reverse")
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_DOMAIN}" ] && echo $(for i in ${SRS_DOMAIN}; do echo "--srs-domain=${i}"; done))
   CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_SECRETS}" ] && echo $(for i in ${SRS_SECRETS}; do echo "--srs-secret=${i}"; done))
+  CMD_ARGS[0]="${CMD_ARGS[0]} "$([ ! -z "${SRS_SECRETS_FILE}" ] && echo $(for i in ${SRS_SECRETS_FILE}; do echo "--srs-secret-file=${i}"; done))
   CMD_ARGS[0]="${CMD_ARGS[0]} $EXTRA_ARGS"
 fi
 
