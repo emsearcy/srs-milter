@@ -83,7 +83,7 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%doc README
+%doc README.md
 %config(noreplace) %{_sysconfdir}/sysconfig/srs-milter
 %{_initrddir}/srs-milter
 %{_sbindir}/srs-milter
