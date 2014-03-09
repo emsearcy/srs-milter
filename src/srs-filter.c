@@ -73,6 +73,46 @@ struct srs_milter_thread_data {
 
 
 
+char *srs_milter_load_file_secrets(char ***CONFIG_srs_secrets, char *secrets_file) {
+  int i, l;
+  FILE *f;
+  char buffer[1026];
+
+  f = fopen(secrets_file, "r");
+  if (f == NULL)
+    return "ERROR: Failed to open secrets file!\n";
+
+  while (fgets(buffer, 1026, f)) {
+    l = strlen(buffer);
+    if (l == 1 && buffer[0] == '\n')
+      continue;
+
+    if (l == 1026 && buffer[1025] != '\n') {
+      fclose(f);
+      return "ERROR: Line too long in secrets file!\n";
+    }
+
+    if (buffer[l-1] == '\n')
+      buffer[l-1] = 0;
+
+    i = 0;
+    if (!*CONFIG_srs_secrets) {
+      *CONFIG_srs_secrets = (char **) malloc((i+2)*sizeof(char *));
+    } else {
+      while (CONFIG_srs_secrets[i]) i++;
+      *CONFIG_srs_secrets = (char **) realloc(*CONFIG_srs_secrets, (i+2)*sizeof(char *));
+    }
+    (*CONFIG_srs_secrets)[i] = buffer;
+    (*CONFIG_srs_secrets)[i+1] = NULL;
+  }
+
+  fclose(f);
+
+  return NULL;
+}
+
+
+
 int is_local_addr(const char *addr) {
   int i, r;
   const char *dom;
@@ -693,6 +733,8 @@ void usage(char *argv0) {
   printf("      our SRS domain name\n");
   printf("  -c, --srs-secret\n");
   printf("      secret string for SRS hashing algorithm\n");
+  printf("  -C, --srs-secret-file\n");
+  printf("      file containing secrets for SRS hashing algorithm\n");
   printf("  -w, --srs-alwaysrewrite\n");
   printf("  -g, --srs-hashlength\n");
   printf("  -i, --srs-hashmin\n");
@@ -739,6 +781,7 @@ int main(int argc, char* argv[]) {
       {"srs-domain",             required_argument, 0, 'o'},
       {"srs-always",             no_argument,       0, 'y'},
       {"srs-secret",             required_argument, 0, 'c'},
+      {"srs-secret-file",        required_argument, 0, 'C'},
       {"srs-alwaysrewrite",      no_argument,       0, 'w'},
       {"srs-hashlength",         required_argument, 0, 'g'},
       {"srs-hashmin",            required_argument, 0, 'i'},
@@ -749,7 +792,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hdvP:s:t:f:r:mk:t:l:a:o:yc:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hdvP:s:t:f:r:mk:t:l:a:o:yc:C:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -835,6 +878,18 @@ int main(int argc, char* argv[]) {
         }
         CONFIG_srs_secrets[i] = optarg;
         CONFIG_srs_secrets[i+1] = NULL;
+        break;
+
+      case 'C':
+        {
+          i = 0;
+          char *err = srs_milter_load_file_secrets(&CONFIG_srs_secrets, optarg);
+          if (err) {
+            usage(argv[0]);
+            fprintf(stderr, err);
+            exit(EXIT_FAILURE);
+          }
+        }
         break;
 
       case 'l':
