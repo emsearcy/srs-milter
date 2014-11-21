@@ -6,7 +6,7 @@
 #REVERSE=
 #LOCAL_DOMAINS="example.com .allsubdomains.example.com"
 #SRS_DOMAIN="srs.example.com"
-#SRS_SECRETS="secret"
+#SRS_SECRETS_FILE="/etc/srs-milter-secrets"
 #EXTRA_ARGS="--spf-check"
 #
 # User configuration

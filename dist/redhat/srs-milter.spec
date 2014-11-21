@@ -1,7 +1,7 @@
 Summary:        Milter (mail filter) for SRS
 Name:           srs-milter
-Version:        0.0.1
-Release:        2
+Version:        0.0.2
+Release:        1
 License:        GPL
 Group:          System Environment/Daemons
 URL:            http://kmlinux.fjfi.cvut.cz/~vokacpet/activities/srs-milter
@@ -36,18 +36,15 @@ socket to communicate with the Postfix MTA.
 
 %prep
 %setup -q
-sed -i -e   's|srs-filter|srs-milter|g;' \
-        srs-milter.init
 
 %build
-#export SENDMAIL=/usr/sbin/sendmail
 %{__make} %{?_smp_mflags} -C src
 
 %install
 %{__rm} -rf %{buildroot}
 
-%{__install} -D -m0755 srs-milter.init %{buildroot}%{_initrddir}/srs-milter
-%{__install} -D -m0644 srs-milter.sysconfig %{buildroot}%{_sysconfdir}/sysconfig/srs-milter
+%{__install} -D -m0755 dist/redhat/srs-milter.init %{buildroot}%{_initrddir}/srs-milter
+%{__install} -D -m0644 dist/redhat/srs-milter.sysconfig %{buildroot}%{_sysconfdir}/sysconfig/srs-milter
 %{__install} -d -m0755 %{buildroot}%{_localstatedir}/lib/srs-milter
 %{__install} -d -m0750 %{buildroot}%{_localstatedir}/run/srs-milter
 %{__install} -d -m0750 %{buildroot}%{_localstatedir}/run/srs-milter/postfix
@@ -86,7 +83,7 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%doc README
+%doc README.md
 %config(noreplace) %{_sysconfdir}/sysconfig/srs-milter
 %{_initrddir}/srs-milter
 %{_sbindir}/srs-milter
@@ -98,6 +95,10 @@ fi
 %dir %attr(-,sa-milt,postfix) %{_localstatedir}/run/srs-milter/postfix/
 
 %changelog
+* Sun Mar 9 2014 Jason Woods <packages@jasonwoods.me.uk> - 0.0.1-3
+- Use new repository paths
+- Service daemon name is now changed in .init
+
 * Tue May 22 2012 Eric Searcy <eric@linuxfoundation.org> - 0.0.1-2
 - Add postfix package
 - Change service daemon from "filter" to "milter"
