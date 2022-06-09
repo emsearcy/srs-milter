@@ -46,6 +46,14 @@ static char *CONFIG_user = NULL;
 static char *CONFIG_pidfile = NULL;
 static char **CONFIG_domains = NULL;
 static char *CONFIG_alias_cmd = NULL;
+/*
+ * Default --alias-regex that fits sendmail. Here is an exaple output
+ * fom sendmail -bv manu@example.net
+ *  manu@example.net... deliverable: mailer smtp, host mail.example.net, user manu@mail.example.net
+ * Note that backslash is a special character in C, which needs to be
+ * escaped by another backslash to get a litteral backslash, hence 
+ * the double backalshes below for litteral "^\(.*\)\.\.\. deliverable"
+ */
 static char *CONFIG_alias_regex_str = "^\\(.*\\)\\.\\.\\. deliverable";
 static regex_t CONFIG_alias_regex;
 static int CONFIG_spf_check = 0;
@@ -99,7 +107,20 @@ static char *srs_milter_resolve_alias(char *recip) {
     if (fgets(line, sizeof(line), f) == NULL)
       break;
 
+    /*
+     * Attempt to match the line against --alias-regex
+     * we request 2 substrings:
+     * pm[0] gets the whole pattern
+     * pm[1] gets whats is inside the first set of parenthesis.
+     *       This is the alias target we are looking for.
+     */
     if (regexec(&CONFIG_alias_regex, line, 2, pm, 0) == 0) {
+      /*
+       * We got a match, copy the substring between first set of parenthesis
+       * pm[1].rm_so is the index of the substring start
+       * pm[1].rm_eo is the index of the substring end
+       * pm[1].rm_eo - pm[1].rm_so is the substring length
+       */
       recip_alias = strndup(line + pm[1].rm_so, pm[1].rm_eo - pm[1].rm_so);
       break;
     }
@@ -183,6 +204,24 @@ int is_local_addr(const char *addr) {
   return 0;
 }
 
+// Copy a string, stripping enclosing <>
+static char *strdup_strip_brackets(const char *src) {
+  char *dst;
+  size_t len = strlen(src);
+
+  // src[len - 1] is the trailing \0, src[len - 2] is the last char
+  if (len > 1 && src[0] == '<' && src[len - 2] == '>') {
+    /*
+     * src + 1 points to character after the opening <
+     * len - 2 is the string length minus two chars for < and >
+     */
+    dst = strndup(src + 1, len - 2);
+  } else {
+    dst = strdup(src);
+  }
+
+  return dst;
+}
 
 
 static void srs_milter_thread_data_destructor(void* data) {
@@ -319,17 +358,11 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
   cd->recip_remote = 0;
 
   // strore MAIL FROM: address
-  cd->sender = (char *) malloc(strlen(argv[0])+1);
+  cd->sender = strdup_strip_brackets(argv[0]);
   if (!cd->sender) {
     // memory allocation problem
     cd->state |= SS_STATE_INVALID_MSG;
     return SMFIS_CONTINUE;
-  }
-  if (argv[0][0] == '<') {
-    strncpy(cd->sender, argv[0]+1, strlen(argv[0])-2);
-    cd->sender[strlen(argv[0])-2] = '\0';
-  } else {
-    strcpy(cd->sender, argv[0]);
   }
 
   // store MAIL FROM: arguments
@@ -367,17 +400,12 @@ xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
            cd->num, cd->state, argv[0]);
 
   // get recipient address
-  char *recip = (char *) malloc(strlen(argv[0])+1);
+  // +1 is for the trailing \0
+  char *recip = strdup_strip_brackets(argv[0]);
   if (!recip) {
     // memory allocation problem
     cd->state |= SS_STATE_INVALID_MSG;
     return SMFIS_CONTINUE;
-  }
-  if (argv[0][0] == '<') {
-    strncpy(recip, argv[0]+1, strlen(argv[0])-2);
-    recip[strlen(argv[0])-2] = '\0';
-  } else {
-    strcpy(recip, argv[0]);
   }
 
   if (CONFIG_alias_cmd && is_local_addr(recip)) {
@@ -410,11 +438,7 @@ xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
         // memory allocation problem
         cd->state |= SS_STATE_INVALID_MSG;
       } else {
-        if (argv[0][0] == '<') {
-          cd->recip[argc] = strndup(argv[0] + 1, strlen(argv[0]) - 2);
-        } else {
-          cd->recip[argc] = strdup(argv[0]);
-        } 
+        cd->recip[argc] = strdup_strip_brackets(argv[0]);
         cd->recip[argc+1] = NULL;
         if (!cd->recip[argc]) {
           // memory allocation problem
@@ -743,8 +767,12 @@ void daemonize() {
     FILE *f;
 
     f = fopen(CONFIG_pidfile, "w");
-    fprintf(f, "%i", (int) getpid());
-    fclose(f);
+    if (f == NULL) {
+      syslog(LOG_ERR, "cannot write to %s, continuing anyway", CONFIG_pidfile);
+    } else {
+      fprintf(f, "%i", (int) getpid());
+      fclose(f);
+    }
   }
 
   /* Change the file mode mask */
@@ -1054,17 +1082,17 @@ int main(int argc, char* argv[]) {
     struct passwd *pw;
 
     if ((pw = getpwnam(CONFIG_user)) == NULL) {
-      fprintf(stderr, "ERROR: inexistant user %s", CONFIG_user);
+      fprintf(stderr, "ERROR: nonexistant user %s\n", CONFIG_user);
       exit(EXIT_FAILURE);
     }
 
     if (setgid(pw->pw_gid) != 0) {
-      fprintf(stderr, "ERROR: failed to switch to group %d", pw->pw_gid);
+      fprintf(stderr, "ERROR: failed to switch to group %d\n", pw->pw_gid);
       exit(EXIT_FAILURE);
     }
 
     if (setuid(pw->pw_uid) != 0) {
-      fprintf(stderr, "ERROR: failed to switch to user %s", CONFIG_user);
+      fprintf(stderr, "ERROR: failed to switch to user %s\n", CONFIG_user);
       exit(EXIT_FAILURE);
     }
   }
@@ -1075,7 +1103,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (pthread_key_create(&key, &srs_milter_thread_data_destructor)) {
-      fprintf(stderr, "pthread_key_create failed");
+      fprintf(stderr, "pthread_key_create failed\n");
       exit(EXIT_FAILURE);
   }
 
