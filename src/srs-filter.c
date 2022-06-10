@@ -209,8 +209,8 @@ static char *strdup_strip_brackets(const char *src) {
   char *dst;
   size_t len = strlen(src);
 
-  // src[len - 1] is the trailing \0, src[len - 2] is the last char
-  if (len > 1 && src[0] == '<' && src[len - 2] == '>') {
+  // src[len] is the trailing \0, src[len - 1] is the last char
+  if (len > 1 && src[0] == '<' && src[len - 1] == '>') {
     /*
      * src + 1 points to character after the opening <
      * len - 2 is the string length minus two chars for < and >
@@ -320,7 +320,7 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
            cd->num, cd->state, argv[0]);
 
   null_addr = (strcmp(argv[0], "<>") == 0);
-  invalid_addr = (argv[0][0] == '\0' || (!strchr(argv[0], '@' && !null_addr))); 
+  invalid_addr = (argv[0][0] == '\0' || (!strchr(argv[0]), '@' && !null_addr)); 
   if (invalid_addr || (null_addr && !CONFIG_reverse_null)) {
     cd->state |= SS_STATE_INVALID_MSG;
     if (CONFIG_verbose)
