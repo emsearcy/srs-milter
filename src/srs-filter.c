@@ -320,7 +320,7 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
            cd->num, cd->state, argv[0]);
 
   null_addr = (strcmp(argv[0], "<>") == 0);
-  invalid_addr = (argv[0][0] == '\0' || (!strchr(argv[0]), '@' && !null_addr)); 
+  invalid_addr = (argv[0][0] == '\0' || (!strchr(argv[0], '@') && !null_addr)); 
   if (invalid_addr || (null_addr && !CONFIG_reverse_null)) {
     cd->state |= SS_STATE_INVALID_MSG;
     if (CONFIG_verbose)
