@@ -4,9 +4,11 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <regex.h>
 #include <string.h>
 #include <strings.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <syslog.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -38,8 +40,22 @@ static int threads = 0;
 static int CONFIG_verbose = 0;
 static int CONFIG_forward = 0;
 static int CONFIG_reverse = 0;
+static int CONFIG_reverse_null = 0;
 static char *CONFIG_socket = NULL;
+static char *CONFIG_user = NULL;
+static char *CONFIG_pidfile = NULL;
 static char **CONFIG_domains = NULL;
+static char *CONFIG_alias_cmd = NULL;
+/*
+ * Default --alias-regex that fits sendmail. Here is an exaple output
+ * fom sendmail -bv manu@example.net
+ *  manu@example.net... deliverable: mailer smtp, host mail.example.net, user manu@mail.example.net
+ * Note that backslash is a special character in C, which needs to be
+ * escaped by another backslash to get a litteral backslash, hence 
+ * the double backalshes below for litteral "^\(.*\)\.\.\. deliverable"
+ */
+static char *CONFIG_alias_regex_str = "^\\(.*\\)\\.\\.\\. deliverable";
+static regex_t CONFIG_alias_regex;
 static int CONFIG_spf_check = 0;
 static char *CONFIG_spf_heloname = NULL;
 static union {
@@ -71,7 +87,54 @@ struct srs_milter_thread_data {
   SPF_server_t *spf;
 };
 
+static char *srs_milter_resolve_alias(char *recip) {
+  char *recip_alias = NULL;
+  char *alias_cmd = NULL;
+  FILE *f = NULL;
 
+  if (asprintf(&alias_cmd, CONFIG_alias_cmd, recip) < 0)
+    goto out;
+
+  if ((f = popen(alias_cmd, "r")) == NULL) {
+    syslog(LOG_ERR, "failed to run alias-cmd %s: %s", alias_cmd, strerror(errno));
+    goto out;
+  }
+
+  do {
+    char line[4096];
+    regmatch_t pm[2];
+
+    if (fgets(line, sizeof(line), f) == NULL)
+      break;
+
+    /*
+     * Attempt to match the line against --alias-regex
+     * we request 2 substrings:
+     * pm[0] gets the whole pattern
+     * pm[1] gets whats is inside the first set of parenthesis.
+     *       This is the alias target we are looking for.
+     */
+    if (regexec(&CONFIG_alias_regex, line, 2, pm, 0) == 0) {
+      /*
+       * We got a match, copy the substring between first set of parenthesis
+       * pm[1].rm_so is the index of the substring start
+       * pm[1].rm_eo is the index of the substring end
+       * pm[1].rm_eo - pm[1].rm_so is the substring length
+       */
+      recip_alias = strndup(line + pm[1].rm_so, pm[1].rm_eo - pm[1].rm_so);
+      break;
+    }
+  } while (!feof(f));
+
+out:
+  if (f)
+    pclose(f);
+
+  if (alias_cmd)
+    free(alias_cmd);
+
+  return recip_alias;
+}
 
 char *srs_milter_load_file_secrets(char ***CONFIG_srs_secrets, char *secrets_file) {
   int i, l;
@@ -115,7 +178,7 @@ int is_local_addr(const char *addr) {
   int i, r;
   const char *dom;
 
-  if (!addr)
+  if (!addr || !*addr)
     return 0;
 
   if (!CONFIG_domains)
@@ -141,6 +204,24 @@ int is_local_addr(const char *addr) {
   return 0;
 }
 
+// Copy a string, stripping enclosing <>
+static char *strdup_strip_brackets(const char *src) {
+  char *dst;
+  size_t len = strlen(src);
+
+  // src[len] is the trailing \0, src[len - 1] is the last char
+  if (len > 1 && src[0] == '<' && src[len - 1] == '>') {
+    /*
+     * src + 1 points to character after the opening <
+     * len - 2 is the string length minus two chars for < and >
+     */
+    dst = strndup(src + 1, len - 2);
+  } else {
+    dst = strdup(src);
+  }
+
+  return dst;
+}
 
 
 static void srs_milter_thread_data_destructor(void* data) {
@@ -228,6 +309,8 @@ static sfsistat
 xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
   struct srs_milter_connection_data* cd =
           (struct srs_milter_connection_data*) smfi_getpriv(ctx);
+  int invalid_addr = 0;
+  int null_addr = 0;
 
   if (cd->state & SS_STATE_INVALID_CONN)
     return SMFIS_CONTINUE;
@@ -236,7 +319,9 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
     syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\")",
            cd->num, cd->state, argv[0]);
 
-  if (strlen(argv[0]) < 1 || strcmp(argv[0], "<>") == 0 || argv[0][0] != '<' || argv[0][strlen(argv[0])-1] != '>' || !strchr(argv[0], '@')) {
+  null_addr = (strcmp(argv[0], "<>") == 0);
+  invalid_addr = (argv[0][0] == '\0' || (!strchr(argv[0], '@') && !null_addr)); 
+  if (invalid_addr || (null_addr && !CONFIG_reverse_null)) {
     cd->state |= SS_STATE_INVALID_MSG;
     if (CONFIG_verbose)
       syslog(LOG_DEBUG, "conn# %d[%i] - xxfi_srs_milter_envfrom(\"%s\"): skipping \"MAIL FROM: %s\"",
@@ -273,14 +358,12 @@ xxfi_srs_milter_envfrom(SMFICTX* ctx, char** argv) {
   cd->recip_remote = 0;
 
   // strore MAIL FROM: address
-  cd->sender = (char *) malloc(strlen(argv[0])-1);
+  cd->sender = strdup_strip_brackets(argv[0]);
   if (!cd->sender) {
     // memory allocation problem
     cd->state |= SS_STATE_INVALID_MSG;
     return SMFIS_CONTINUE;
   }
-  strncpy(cd->sender, argv[0]+1, strlen(argv[0])-2);
-  cd->sender[strlen(argv[0])-2] = '\0';
 
   // store MAIL FROM: arguments
   {
@@ -317,14 +400,23 @@ xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
            cd->num, cd->state, argv[0]);
 
   // get recipient address
-  char *recip = (char *) malloc(strlen(argv[0])-1);
+  // +1 is for the trailing \0
+  char *recip = strdup_strip_brackets(argv[0]);
   if (!recip) {
     // memory allocation problem
     cd->state |= SS_STATE_INVALID_MSG;
     return SMFIS_CONTINUE;
   }
-  strncpy(recip, argv[0]+1, strlen(argv[0])-2);
-  recip[strlen(argv[0])-2] = '\0';
+
+  if (CONFIG_alias_cmd && is_local_addr(recip)) {
+    char *recip_alias;
+
+    if ((recip_alias = srs_milter_resolve_alias(recip)) != NULL) {
+      syslog(LOG_DEBUG, "resolved recipient %s as %s", recip, recip_alias);
+      free(recip);
+      recip = recip_alias;
+    }
+  }
 
   if (!is_local_addr(recip)) {
     cd->recip_remote = 1;
@@ -346,7 +438,7 @@ xxfi_srs_milter_envrcpt(SMFICTX* ctx, char** argv) {
         // memory allocation problem
         cd->state |= SS_STATE_INVALID_MSG;
       } else {
-        cd->recip[argc] = strdup(argv[0]);
+        cd->recip[argc] = strdup_strip_brackets(argv[0]);
         cd->recip[argc+1] = NULL;
         if (!cd->recip[argc]) {
           // memory allocation problem
@@ -670,6 +762,19 @@ void daemonize() {
     exit(EXIT_SUCCESS);
   }
 
+  /* update pidfile */
+  if (CONFIG_pidfile) {
+    FILE *f;
+
+    f = fopen(CONFIG_pidfile, "w");
+    if (f == NULL) {
+      syslog(LOG_ERR, "cannot write to %s, continuing anyway", CONFIG_pidfile);
+    } else {
+      fprintf(f, "%i", (int) getpid());
+      fclose(f);
+    }
+  }
+
   /* Change the file mode mask */
   umask(0);
 
@@ -718,15 +823,25 @@ void usage(char *argv0) {
   printf("      {unix|local}:/path/to/file -- a named pipe.\n");
   printf("      inet:port@{hostname|ip-address} -- an IPV4 socket.\n");
   printf("      inet6:port@{hostname|ip-address} -- an IPV6 socket.\n");
+  printf("  -u, --user\n");
+  printf("      unprivilegied user we should run as\n");
   printf("  -t, --timeout\n");
   printf("      milter timeout\n");
   printf("  -f, --forward\n");
   printf("      SRS encode the envelope sender of non-local-destined mail\n");
   printf("  -r, --reverse\n");
   printf("      SRS decode any envelope recipients of local SRS addresses\n");
+  printf("  -n, --reverse-null\n");
+  printf("      Also decode SRS addresses when sender is <>\n");
   printf("  -m, --domain\n");
   printf("      all local mail domains for that we accept mail\n");
   printf("      starting domain name with \".\" match also all subdomains\n");
+  printf("  -A, --alias-cmd\n");
+  printf("      external command to resolve aliases\n");
+  printf("      hint: \"sendmail -bv %%s\", %%s gets replaced by recipient\n");
+  printf("  -R, --alias-regex\n");
+  printf("      regex to extract resolved alias from alias-cmd output\n");
+  printf("      default value matches sendmail -bv output\n");
   printf("  -o, --srs-domain\n");
   printf("      our SRS domain name\n");
   printf("  -c, --srs-secret\n");
@@ -771,10 +886,14 @@ int main(int argc, char* argv[]) {
       {"verbose",                no_argument,       0, 'v'},
       {"pidfile",                required_argument, 0, 'P'},
       {"socket",                 required_argument, 0, 's'},
+      {"user",                   required_argument, 0, 'u'},
       {"timeout",                required_argument, 0, 't'},
       {"forward",                no_argument,       0, 'f'},
       {"reverse",                no_argument,       0, 'r'},
+      {"reverse-null",           no_argument,       0, 'n'},
       {"local-domain",           required_argument, 0, 'm'},
+      {"alias-cmd",              required_argument, 0, 'A'},
+      {"alias-regex",            required_argument, 0, 'R'},
       {"spf-check",              no_argument,       0, 'k'},
       {"spf-heloname",           required_argument, 0, 'l'},
       {"spf-address",            required_argument, 0, 'a'},
@@ -792,7 +911,7 @@ int main(int argc, char* argv[]) {
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "hdvP:s:t:f:r:mk:t:l:a:o:yc:C:wg:i:x:e:",
+    c = getopt_long(argc, argv, "hdvP:s:u:t:f:rnm:A:R:kt:l:a:o:yc:C:wg:i:x:e:",
                     long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -824,13 +943,18 @@ int main(int argc, char* argv[]) {
         break;
 
       case 'P':
-        f = fopen(optarg, "w");
+        CONFIG_pidfile = optarg;
+        f = fopen(CONFIG_pidfile, "w");
         fprintf(f, "%i", (int) getpid());
         fclose(f);
         break;
 
       case 's':
         CONFIG_socket = optarg;
+        break;
+
+      case 'u':
+        CONFIG_user = optarg;
         break;
 
       case 't':
@@ -852,6 +976,10 @@ int main(int argc, char* argv[]) {
         CONFIG_reverse = 1;
         break;
 
+      case 'n':
+        CONFIG_reverse_null = 1;
+        break;
+
       case 'm':
         i = 0;
         if (!CONFIG_domains) {
@@ -862,6 +990,14 @@ int main(int argc, char* argv[]) {
         }
         CONFIG_domains[i] = optarg;
         CONFIG_domains[i+1] = NULL;
+        break;
+
+      case 'A':
+        CONFIG_alias_cmd = optarg;
+        break;
+
+      case 'R':
+        CONFIG_alias_regex_str = optarg;
         break;
 
       case 'k':
@@ -942,8 +1078,32 @@ int main(int argc, char* argv[]) {
     putchar ('\n');
   }
 
+  if (CONFIG_user) {
+    struct passwd *pw;
+
+    if ((pw = getpwnam(CONFIG_user)) == NULL) {
+      fprintf(stderr, "ERROR: nonexistant user %s\n", CONFIG_user);
+      exit(EXIT_FAILURE);
+    }
+
+    if (setgid(pw->pw_gid) != 0) {
+      fprintf(stderr, "ERROR: failed to switch to group %d\n", pw->pw_gid);
+      exit(EXIT_FAILURE);
+    }
+
+    if (setuid(pw->pw_uid) != 0) {
+      fprintf(stderr, "ERROR: failed to switch to user %s\n", CONFIG_user);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  if (regcomp(&CONFIG_alias_regex, CONFIG_alias_regex_str, REG_BASIC) != 0) {
+    fprintf(stderr, "ERROR: can't compile regex %s\n", CONFIG_alias_regex_str);
+    exit(EXIT_FAILURE);
+  }
+
   if (pthread_key_create(&key, &srs_milter_thread_data_destructor)) {
-      fprintf(stderr, "pthread_key_create failed");
+      fprintf(stderr, "pthread_key_create failed\n");
       exit(EXIT_FAILURE);
   }
 
